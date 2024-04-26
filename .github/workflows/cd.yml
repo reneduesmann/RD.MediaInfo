@@ -1,0 +1,46 @@
+name: CD Nuget
+
+on:
+  release:
+    types: [published]
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+
+    - name: Set Version Variable
+      env:
+        TAG: ${{ github.ref_name }}
+      run: echo "VERSION=${TAG#v}" >> $GITHUB_ENV
+
+    - name: Pack
+      run: dotnet pack RD.MediaInfo/RD.MediaInfo.csproj -c Release -o Build /p:PackageVersion=$VERSION
+
+    - name: Upload Nuget Package
+      uses: actions/upload-artifact@v2
+      with:
+            name: package
+            path: Build/*.nupkg
+
+    - name: Upload Nuget Package to Nuget
+      run: dotnet nuget push Build/*.nupkg --no-symbols --skip-duplicate -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json
+
+    - name: Upload Nuget Package to Github
+      run: dotnet nuget push Build/*.nupkg --skip-duplicate -k ${{ secrets.APIKEY }} -s "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
